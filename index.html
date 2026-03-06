@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Hacker Cinematic — Enhanced Demo</title>
+<style>
+:root{--green:#00ff66;--bg:#000;--accent:#ff3b3b}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--green);font-family:"Courier New",monospace;overflow:hidden}
+#matrix{position:fixed;inset:0;z-index:0}
+.panel{position:relative;z-index:3;max-width:960px;margin:36px auto;padding:26px;border-radius:8px;background:linear-gradient(180deg,rgba(0,0,0,0.6),rgba(0,0,0,0.25));border:1px solid rgba(0,255,102,0.06);box-shadow:0 20px 80px rgba(0,0,0,0.6)}
+.log{white-space:pre-line;font-size:14px;line-height:1.45;min-height:120px}
+.cursor{display:inline-block;width:10px;background:var(--green);margin-left:6px;animation:blink 1s steps(2) infinite}
+@keyframes blink{0%{opacity:1}50%{opacity:0}100%{opacity:1}}
+
+/* BOOT SCREEN */
+#bootScreen{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;text-align:center;padding:20px}
+#scanText{min-height:140px;color:var(--green);font-size:16px}
+#arrow{font-size:40px;color:#5fffa0;margin-top:18px;display:none;animation:arrowMove 1s infinite}
+@keyframes arrowMove{0%{transform:translateX(-8px)}50%{transform:translateX(8px)}100%{transform:translateX(-8px)}}
+
+/* ALERT */
+.overlay{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .25s}
+.overlay.show{opacity:1;pointer-events:auto}
+.alert{width:92%;max-width:640px;background:linear-gradient(180deg,#0b0b0b,#111);border-radius:12px;padding:18px;border:2px solid rgba(255,59,59,0.12);box-shadow:0 18px 60px rgba(0,0,0,0.7)}
+.ahead{display:flex;align-items:center;gap:12px;padding:12px;background:linear-gradient(90deg,var(--accent),#d44);color:#fff;border-radius:8px}
+.abody{padding:12px;color:#fff}
+.big{font-size:20px;font-weight:800}
+.progress{height:12px;background:rgba(255,255,255,0.03);border-radius:8px;margin-top:12px;overflow:hidden}
+.bar{height:100%;width:0;background:linear-gradient(90deg,#ff9b9b,#ff3b3b);transition:width .6s linear}
+.actions{display:flex;gap:10px;justify-content:flex-end;padding-top:12px}
+
+/* POST ALERT PANEL */
+#postPanel{position:fixed;right:14px;bottom:14px;width:360px;max-width:92vw;background:rgba(0,0,0,0.85);border:1px solid rgba(255,255,255,0.04);padding:12px;border-radius:10px;color:#fff;z-index:60;display:none}
+.postRow{display:flex;justify-content:space-between;align-items:center;margin:6px 0;padding:6px;background:rgba(255,255,255,0.01);border-radius:6px}
+
+/* infected file list */
+#fileList{max-height:120px;overflow:auto;font-size:13px;margin-top:8px}
+.fileItem{display:flex;justify-content:space-between;padding:6px 8px;border-radius:6px;margin-bottom:6px;background:rgba(255,255,255,0.02);}
+
+/* BSOD */
+#bsod{position:fixed;inset:0;background:#010f23;color:#c6e7ff;padding:30px;font-family:Consolas,monospace;font-size:16px;display:none;z-index:9999}
+
+/* buttons */
+.btn{padding:8px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:700}
+.btn-close{background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.06)}
+.btn-action{background:var(--accent);color:#fff}
+
+/* small helpers */
+.small{font-size:12px;color:#cfd9cc}
+</style>
+</head>
+<body>
+
+<!-- BOOT SCREEN -->
+<div id="bootScreen" aria-hidden="false">
+  <h2 style="color:var(--green);margin:6px 0">VERIFICACIÓN DEL SISTEMA</h2>
+  <div id="scanText">Esperando ejecución...</div>
+  <div id="arrow">➜</div>
+  <div style="margin-top:14px">
+    <button id="startProgram" class="btn" style="display:none;background:var(--green);color:#000">ARRANCAR PROGRAMA</button>
+    <button id="runBtn" class="btn" style="background:var(--green);color:#000">RUN</button>
+  </div>
+</div>
+
+<!-- MATRIX BACKGROUND -->
+<canvas id="matrix" aria-hidden="true"></canvas>
+
+<!-- TERMINAL -->
+<div class="panel" id="panel" aria-hidden="false">
+  <div class="title" style="display:flex;align-items:center;gap:12px">
+    <h1 class="glitch" data-text="SYSTEM — ACCESS" style="margin:0;color:var(--green)">SYSTEM — ACCESS</h1>
+    <div style="flex:1"></div>
+    <div style="font-size:12px;color:#9ffea0">status: <span id="status">OK</span></div>
+  </div>
+  <div class="log" id="log">
+> Iniciando sistema...
+> Cargando módulos de red...
+<span class="cursor"></span>
+  </div>
+</div>
+
+<!-- ALERT OVERLAY -->
+<div class="overlay" id="overlay" aria-hidden="true" role="dialog" aria-labelledby="warnTitle">
+  <div class="alert" role="document" id="alertBox">
+    <div class="ahead"><strong>ALERTA CRÍTICA — SECURITY</strong></div>
+    <div class="abody">
+      <div id="warnTitle" class="big">Virus detected</div>
+      <div class="small">Se han detectado amenazas activas. Riesgo inminente para datos y red.</div>
+      <div class="postRow" style="margin-top:8px"><div class="small">Proceso afectado:</div><div class="small">svchost.exe</div></div>
+      <div class="postRow"><div class="small">Origen:</div><div class="small">Conexión remota no autorizada</div></div>
+      <div class="progress" aria-hidden="true"><div class="bar" id="bar"></div></div>
+      <div style="margin-top:10px;color:#ffdede">You are in danger — toma acción inmediatamente.</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-close" id="dismiss">Cancelar</button>
+      <button class="btn btn-action" id="quarantine">Iniciar cuarentena</button>
+    </div>
+  </div>
+</div>
+
+<!-- POST ALERT PANEL (aparece después de dismiss/quarantine) -->
+<div id="postPanel" role="region" aria-live="polite">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div style="font-weight:800">Report</div>
+    <div id="postStatus" class="small">...</div>
+  </div>
+
+  <div class="postRow"><div>IP:</div><div id="ipText">Cargando...</div></div>
+  <div class="postRow"><div>MAC:</div><div id="macText">--:--:--:--:--:--</div></div>
+  <div class="postRow"><div>Ubicación:</div><div id="locText">Desconocida</div></div>
+
+  <div style="margin-top:8px;font-weight:700">Archivos afectados</div>
+  <div id="fileList"></div>
+
+  <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">
+    <button id="showBSOD" class="btn btn-close">Mostrar BSOD</button>
+    <button id="closeAll" class="btn btn-action">Cerrar todo</button>
+  </div>
+</div>
+
+<!-- BSOD falsa -->
+<div id="bsod" role="alert" aria-hidden="true">
+  <div style="font-weight:700;font-size:20px;margin-bottom:12px">:(</div>
+  <div>Tu PC ha sufrido un error crítico.</div>
+  <div style="margin-top:12px">Recopilando información de error... No apague el equipo.</div>
+  <div style="margin-top:18px;color:#fff;font-size:13px">Stop Code: CRITICAL_PROCESS_FAILED</div>
+</div>
+
+<script>
+/* ---------- MATRIX RAIN ---------- */
+const canvas = document.getElementById('matrix');
+const ctx = canvas.getContext('2d');
+let w,h,cols,ypos;
+function resize(){ w = canvas.width = innerWidth; h = canvas.height = innerHeight; cols = Math.floor(w/14); ypos = Array(cols).fill(0); }
+window.addEventListener('resize', resize);
+resize();
+function matrixLoop(){
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.fillRect(0,0,w,h);
+  ctx.fillStyle = "#0f0";
+  ctx.font = "13px monospace";
+  ypos.forEach((y, idx) => {
+    const text = String.fromCharCode(33 + Math.random()*94);
+    const x = idx * 14;
+    ctx.fillText(text, x, y);
+    if(y > 100 + Math.random()*10000) ypos[idx] = 0;
+    else ypos[idx] = y + 14;
+  });
+  requestAnimationFrame(matrixLoop);
+}
+matrixLoop();
+
+/* ---------- TERMINAL TYPING ---------- */
+const log = document.getElementById('log');
+const cursor = document.querySelector('.cursor');
+let lines = [
+  "> Detectando puertos abiertos...",
+  "> Escaneo de procesos (deep)...",
+  "> Buscando firmas maliciosas...",
+  "> Amenaza encontrada: actividad anómala",
+  "> Recolectando huellas...",
+  "> Enrutando logs a consola segura..."
+];
+let li = 0;
+function typeStep(){
+  if(li < lines.length){
+    log.innerHTML += "\\n" + lines[li];
+    li++;
+    setTimeout(typeStep, 700 + Math.random()*500);
+    if(li === lines.length){
+      setTimeout(()=>{ document.getElementById('status').textContent = "RISK"; document.getElementById('status').style.color = "#ff9b9b";}, 500);
+    }
+  }
+}
+setTimeout(typeStep, 600);
+
+/* ---------- AUDIO (WebAudio) ---------- */
+let audioCtx = null;
+let alarmInterval = null;
+let ambientSource = null;
+
+function initAudio(){
+  if(audioCtx) return;
+  try{
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }catch(e){
+    console.warn("AudioContext no disponible:", e);
+    audioCtx = null;
+  }
+}
+
+/* alarma principal: short sting */
+function playAlarmOnce(vol=0.25, freq=700, dur=0.7){
+  if(!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(freq, now);
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(vol, now + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(now); o.stop(now + dur);
+}
+
+/* arranca loop de alarma repetida */
+function startAlarmLoop(){
+  if(!audioCtx) return;
+  playAlarmOnce(0.28, 720, 0.8);
+  alarmInterval = setInterval(()=>{ playAlarmOnce(0.28, 720, 0.8); }, 1100);
+}
+
+/* sonido de cuarentena (sweep descendente) */
+function playQuarantineSound(){
+  if(!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(1200, now);
+  o.frequency.exponentialRampToValueAtTime(220, now + 1.0);
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.5, now + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 1.0);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(now); o.stop(now + 1.02);
+}
+
+/* sonido de cancelar (pequeño beep alegre) */
+function playCancelSound(){
+  if(!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'square';
+  o.frequency.setValueAtTime(1200, now);
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(now); o.stop(now + 0.2);
+}
+
+/* sonido ambiente sutil (opcional loop) */
+function startAmbientTone(){
+  if(!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.value = 80;
+  g.gain.value = 0.0005;
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start();
+  ambientSource = {osc: o, gain: g};
+}
+function stopAmbientTone(){
+  if(ambientSource && audioCtx){
+    try{ ambientSource.osc.stop(); }catch(e){}
+    ambientSource = null;
+  }
+}
+
+/* utility: generar MAC aleatoria */
+function randomMAC(){
+  const hex = "0123456789ABCDEF";
+  let mac = [];
+  for(let i=0;i<6;i++){
+    mac.push(hex[Math.floor(Math.random()*16)] + hex[Math.floor(Math.random()*16)]);
+  }
+  return mac.join(':');
+}
+
+/* ---------- BOOT SCREEN FLOW ---------- */
+const runBtn = document.getElementById('runBtn');
+const scanText = document.getElementById('scanText');
+const startProgram = document.getElementById('startProgram');
+const arrow = document.getElementById('arrow');
+const bootScreen = document.getElementById('bootScreen');
+
+runBtn.addEventListener('click', ()=>{
+  runBtn.style.display = 'none';
+  const steps = [
+    "Verificando usuario...",
+    "Usuario detectado",
+    "IP: 192.168.34.01",
+    `MAC: ${randomMAC()}`,
+    "Iniciando escaneo del sistema...",
+    "Analizando red...",
+    "Revisando procesos activos...",
+    "Validando permisos...",
+    "Usuario verificado correctamente"
+  ];
+  let i = 0;
+  scanText.innerHTML = "";
+  function next(){
+    if(i < steps.length){
+      scanText.innerHTML += "<div>" + steps[i] + "</div>";
+      i++;
+      setTimeout(next, 700);
+    } else {
+      arrow.style.display = 'block';
+      startProgram.style.display = 'inline-block';
+    }
+  }
+  next();
+});
+
+startProgram.addEventListener('click', ()=>{
+  // este click cuenta como interacción -> audio puede iniciarse
+  initAudio();
+  try{ if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); }catch(e){}
+  bootScreen.style.display = 'none';
+  // un pequeño retardo antes de iniciar la alerta principal
+  setTimeout(()=>{ showWarning(); }, 500);
+});
+
+/* también intentamos auto-inicializar audio en el primer gesto */
+window.addEventListener('pointerdown', function once(){ initAudio(); window.removeEventListener('pointerdown', once); }, {passive:true});
+
+/* ---------- ALERT / PROGRESS ---------- */
+const overlay = document.getElementById('overlay');
+const bar = document.getElementById('bar');
+
+function showWarning(){
+  overlay.classList.add('show');
+  // iniciar sonido repetitivo
+  if(audioCtx) startAlarmLoop();
+  // vibración
+  if(navigator.vibrate) navigator.vibrate([200,80,200]);
+  // progresar barra
+  let pct = 0;
+  const t = setInterval(()=>{
+    pct += 6 + Math.random()*14;
+    if(pct >= 100){ pct = 100; clearInterval(t); }
+    bar.style.width = pct + "%";
+  }, 320);
+}
+
+/* ---------- POST ALERT FLOW ---------- */
+const dismissBtn = document.getElementById('dismiss');
+const quarantineBtn = document.getElementById('quarantine');
+const postPanel = document.getElementById('postPanel');
+const ipText = document.getElementById('ipText');
+const macText = document.getElementById('macText');
+const locText = document.getElementById('locText');
+const fileList = document.getElementById('fileList');
+const postStatus = document.getElementById('postStatus');
+const showBSOD = document.getElementById('showBSOD');
+const closeAll = document.getElementById('closeAll');
+const bsod = document.getElementById('bsod');
+
+let simulatedMAC = randomMAC();
+
+// función que muestra el panel posterior con efectos según tipo
+function handlePost(type){
+  // detener alarma principal
+  if(alarmInterval) { clearInterval(alarmInterval); alarmInterval = null; }
+  stopAmbientTone();
+  // small feedback sound depending on action
+  initAudio();
+  if(type === 'quarantine'){
+    playQuarantineSound();
+    postStatus.textContent = 'Quarantine applied';
+  } else {
+    playCancelSound();
+    postStatus.textContent = 'User dismissed';
+  }
+
+  // obtener IP real y ubicación vía ipapi.co (si falla, usamos valores simulados)
+  fetch('https://ipapi.co/json/')
+    .then(r => r.ok ? r.json() : Promise.reject('no ok'))
+    .then(data => {
+      ipText.textContent = data.ip || 'N/A';
+      locText.textContent = (data.city? data.city + ', ' : '') + (data.country_name || 'Desconocido');
+      macText.textContent = simulatedMAC;
+      showPostPanel(type);
+    })
+    .catch(err => {
+      // si la petición falla (CORS o sin internet), mostrar valores simulados
+      ipText.textContent = '192.168.34.101';
+      locText.textContent = 'México, Ciudad';
+      macText.textContent = simulatedMAC;
+      showPostPanel(type);
+    });
+}
+
+// animación y simulación de archivos afectados
+function showPostPanel(type){
+  overlay.classList.remove('show');
+  postPanel.style.display = 'block';
+  // simular lista de archivos "infectados"
+  const files = [
+    "C:\\Users\\Public\\Fotos\\vacaciones.jpg",
+    "C:\\Users\\Ulises\\Documentos\\tarea.pdf",
+    "C:\\Windows\\System32\\drivers\\etc\\hosts",
+    "D:\\Musica\\playlist.mp3",
+    "E:\\Proyectos\\codigo.js"
+  ];
+  fileList.innerHTML = '';
+  let idx = 0;
+  const fi = setInterval(()=>{
+    if(idx < files.length){
+      const el = document.createElement('div');
+      el.className = 'fileItem';
+      el.innerHTML = `<div style="max-width:70%;">${files[idx]}</div><div class="small">encriptado</div>`;
+      fileList.prepend(el);
+      // efecto vibrar y flash
+      el.animate([{opacity:0.2},{opacity:1}],{duration:400,iterations:1});
+      idx++;
+    } else {
+      clearInterval(fi);
+      // si fue cuarentena, reproducir sonido extra y animación
+      if(postStatus.textContent.includes('Quarantine')){
+        // repetido suave
+        let qcount=0;
+        const qint = setInterval(()=>{ playQuarantineSound(); qcount++; if(qcount>2) clearInterval(qint); }, 500);
+      }
+    }
+  }, 450);
+  // iniciar un tono ambiente sutil
+  startAmbientTone();
+
+  // vibrar un poco para enfatizar
+  if(navigator.vibrate) navigator.vibrate([150,60,150]);
+
+  // mostrar un indicador verde animado si fue dismiss (usuario verificado)
+  if(postStatus.textContent.includes('dismiss')){
+    const ok = document.createElement('div');
+    ok.style.position='absolute'; ok.style.right='18px'; ok.style.top='8px'; ok.style.color='#9ffea0'; ok.style.fontWeight='800';
+    ok.textContent = '✔ Usuario verificado correctamente';
+    postPanel.appendChild(ok);
+    setTimeout(()=>{ ok.animate([{opacity:0},{opacity:1}],{duration:600,iterations:2,direction:'alternate'}); },50);
+    setTimeout(()=>{ try{ postPanel.removeChild(ok); }catch(e){} },4200);
+  }
+}
+
+/* botones de alerta */
+dismissBtn.addEventListener('click', ()=>{
+  initAudio(); // interacción
+  handlePost('dismiss');
+});
+quarantineBtn.addEventListener('click', ()=>{
+  initAudio();
+  handlePost('quarantine');
+});
+
+/* BSOD y cerrar todo */
+showBSOD.addEventListener('click', ()=>{
+  bsod.style.display = 'block';
+  // sonido dramático
+  initAudio();
+  const now = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(120, now);
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.12, now + 0.05);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 2.5);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(now); o.stop(now + 2.8);
+  // detener ambient
+  stopAmbientTone();
+});
+closeAll.addEventListener('click', ()=>{
+  // parar todo y limpiar
+  if(alarmInterval) { clearInterval(alarmInterval); alarmInterval = null; }
+  stopAmbientTone();
+  postPanel.style.display = 'none';
+  bsod.style.display = 'none';
+  // opcional: recargar la página para dejarlo limpio
+  setTimeout(()=>location.reload(), 300);
+});
+
+/* para accesibilidad: cerrar BSOD con tecla */
+window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape'){ bsod.style.display='none'; } });
+
+</script>
+</body>
+</html>
